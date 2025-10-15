@@ -1,6 +1,5 @@
 requests
 pandas
 streamlit
-lxml
-html5lib
-beautifulsoup4
+selenium
+webdriver-manager
