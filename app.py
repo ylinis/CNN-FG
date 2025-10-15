@@ -6,52 +6,49 @@ from datetime import datetime, date
 
 # Selenium importai
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 
-@st.cache_data
+@st.cache_data(ttl=3600) # Pridedame talpinimą (cache) 1 valandai
 def gauti_duomenis_su_selenium(pradzios_data: date, pabaigos_data: date):
     """
     Nuskaito Fear & Greed indekso duomenis iš finhacker.cz,
     naudojant Selenium naršyklės automatizavimui.
     """
     try:
-        # --- Selenium konfigūracija Streamlit Cloud ---
+        # --- Supaprastinta Selenium konfigūracija Streamlit Cloud ---
         options = Options()
-        options.add_argument("--disable-gpu")
-        options.add_argument("--headless") # Būtina serverio aplinkai
+        options.add_argument("--headless")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-
-        # Automatiškai įdiegia ir paleidžia tinkamą chromedriver
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
+        options.add_argument("--disable-gpu")
+        
+        # Inicijuojame driver'į be webdriver_manager.
+        # Selenium automatiškai naudos sistemoje esantį chromium-driver.
+        driver = webdriver.Chrome(options=options)
 
         url = "https://finhacker.cz/fear-and-greed-index-historical-data/"
         driver.get(url)
 
         # --- Laukimas, kol lentelė atsiras ---
-        # Laukiame iki 20 sekundžių, kol elementas su ID 'tablepress-2' bus matomas
         wait = WebDriverWait(driver, 20)
-        wait.until(EC.presence_of_element_located((By.ID, "tablepress-2")))
+        # Naudojame CSS SELEKTORIŲ, nes jis patikimesnis
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#tablepress-2")))
 
-        # Kai lentelė yra, perduodame puslapio kodą į pandas
         page_source = driver.page_source
-        lenteles = pd.read_html(page_source, header=0)
-        df = lenteles[0] # Dabar lentelė greičiausiai bus pirma
+        lenteles = pd.read_html(page_source)
+        df = lenteles[0] 
 
     except Exception as e:
         st.error(f"Selenium klaida: Nepavyko gauti duomenų. Klaida: {e}")
         return None
     finally:
         if 'driver' in locals():
-            driver.quit() # Būtinai uždarome naršyklę
+            driver.quit()
 
-    # --- Duomenų valymas (lieka beveik nepakitęs) ---
+    # --- Duomenų valymas (lieka nepakitęs) ---
     try:
         df.rename(columns={
             'Date': 'data',
