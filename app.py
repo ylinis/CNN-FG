@@ -12,27 +12,28 @@ def gauti_ir_apdoroti_duomenis(pradzios_data: date, pabaigos_data: date):
     Grąžina pandas DataFrame arba None, jei įvyko klaida.
     """
     try:
-        url = f"https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{pabaigos_data.strftime('%Y-%m-%d')}"
+        # <<< --- PAKEITIMAS YRA ČIA --- >>>
+        # Užuot nurodę pabaigos datą, kreipiamės į bendrą adresą,
+        # tikėdamiesi gauti visus istorinius duomenis.
+        url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+        # <<< --- PAKEITIMO PABAIGA --- >>>
         
-        # <<< --- ŠTAI PAKEITIMAS --- >>>
-        # Pridedame antraštę (header), kuri imituoja naršyklę
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
         
-        # Naudojame 'headers' parametrą siųsdami užklausą
         r = requests.get(url, headers=headers, timeout=15)
-        # <<< --- PAKEITIMO PABAIGA --- >>>
-
         r.raise_for_status()
         
         duomenys = r.json()
         
+        # Tolimesnis kodas lieka visiškai toks pat
         df = pd.DataFrame(duomenys['fear_and_greed_historical']['data'])
         df.rename(columns={'x': 'timestamp', 'y': 'reiksme', 'rating': 'ivertinimas'}, inplace=True)
         df['data'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True).dt.date
         df.set_index(pd.to_datetime(df['data']), inplace=True)
         
+        # Filtruojame visą gautą duomenų rinkinį pagal vartotojo pasirinktas datas
         filtruotas_df = df.loc[pradzios_data.strftime('%Y-%m-%d'):pabaigos_data.strftime('%Y-%m-%d')]
         
         if filtruotas_df.empty:
@@ -42,7 +43,6 @@ def gauti_ir_apdoroti_duomenis(pradzios_data: date, pabaigos_data: date):
         return galutinis_df
 
     except requests.exceptions.HTTPError as e:
-        # Specialiai apdorojame HTTP klaidų atsakymus
         st.error(f"Serveris atmetė užklausą. Klaidos kodas: {e.response.status_code}. Gali būti, kad CNN pakeitė prieigą arba laikinai blokuoja užklausas.")
         return None
     except requests.exceptions.RequestException as e:
@@ -63,7 +63,7 @@ st.header("1. Pasirinkite datas")
 col1, col2 = st.columns(2)
 
 with col1:
-    pradzios_data = st.date_input("Pradžios data", date(2022, 1, 1))
+    pradzios_data = st.date_input("Pradžios data", date(2020, 1, 1)) # Pakeičiau numatytąją datą
 
 with col2:
     pabaigos_data = st.date_input("Pabaigos data", datetime.now())
@@ -79,7 +79,7 @@ if st.button("Gauti duomenis ir paruošti atsisiuntimui"):
 
         if df is not None:
             if not df.empty:
-                st.success("✅ Duomenys sėkmingai gauti!")
+                st.success(f"✅ Duomenys sėkmingai gauti! Iš viso eilučių: {len(df)}")
                 st.header("3. Peržiūra ir atsisiuntimas")
                 st.dataframe(df.head())
                 
