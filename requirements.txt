@@ -3,3 +3,4 @@ pandas
 streamlit
 lxml
 html5lib
+beautifulsoup4
