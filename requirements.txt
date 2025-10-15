@@ -1,5 +1,3 @@
-requests
 pandas
 streamlit
 selenium
-webdriver-manager
