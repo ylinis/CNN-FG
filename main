@@ -1,0 +1,131 @@
+# main.py
+
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+from tkcalendar import DateEntry
+import requests
+import pandas as pd
+from datetime import datetime
+import threading
+
+def gauti_duomenis_ir_saugoti(pradzios_data, pabaigos_data, failo_kelias):
+    """
+    Pagrindinė funkcija, kuri gauna duomenis iš CNN ir išsaugo juos CSV faile.
+    Paleidžiama atskiroje gijoje, kad neužšaldytų GUI.
+    """
+    try:
+        # Atnaujiname GUI būseną
+        status_label.config(text="Siunčiama užklausa į CNN...", foreground="blue")
+        progress_bar.start(10)
+
+        # URL formavimas. Imam visus duomenis iki pabaigos datos.
+        url = f"https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{pabaigos_data.strftime('%Y-%m-%d')}"
+        
+        r = requests.get(url, timeout=15)
+        r.raise_for_status()
+        
+        duomenys = r.json()
+        status_label.config(text="Duomenys gauti. Apdorojama...", foreground="blue")
+        
+        # Duomenų konvertavimas ir filtravimas
+        df = pd.DataFrame(duomenys['fear_and_greed_historical']['data'])
+        df.rename(columns={'x': 'timestamp', 'y': 'reiksme', 'rating': 'ivertinimas'}, inplace=True)
+        df['data'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True).dt.date
+        df.set_index(pd.to_datetime(df['data']), inplace=True)
+        
+        filtruotas_df = df.loc[pradzios_data:pabaigos_data]
+        
+        if filtruotas_df.empty:
+            messagebox.showwarning("Įspėjimas", "Pasirinktame datų intervale duomenų nerasta.")
+            return
+
+        galutinis_df = filtruotas_df[['data', 'reiksme', 'ivertinimas']].sort_index(ascending=False).copy()
+
+        # Išsaugojimas į CSV
+        galutinis_df.to_csv(failo_kelias, index=False, encoding='utf-8-sig')
+        status_label.config(text=f"✅ Sėkmingai išsaugota!", foreground="green")
+        messagebox.showinfo("Pavyko", f"Duomenys išsaugoti faile:\n{failo_kelias}")
+
+    except requests.exceptions.RequestException as e:
+        messagebox.showerror("Klaida", f"Tinklo klaida: Nepavyko gauti duomenų iš CNN.\n\n{e}")
+    except Exception as e:
+        messagebox.showerror("Klaida", f"Įvyko nenumatyta klaida:\n\n{e}")
+    finally:
+        # Atstatome GUI į pradinę būseną
+        progress_bar.stop()
+        progress_bar['value'] = 0
+        status_label.config(text="Pasirinkite datas ir spauskite 'Generuoti'")
+        run_button.config(state="normal")
+
+
+def paleisti_generavima():
+    """
+    Tikrina vartotojo įvestis ir paleidžia duomenų gavimo giją.
+    """
+    pradzios_data = cal_start.get_date()
+    pabaigos_data = cal_end.get_date()
+
+    if pradzios_data > pabaigos_data:
+        messagebox.showerror("Klaida", "Pradžios data negali būti vėlesnė už pabaigos datą.")
+        return
+
+    # Failo išsaugojimo dialogo langas
+    numatytas_pavadinimas = f"fear_greed_index_{pradzios_data.strftime('%Y-%m-%d')}_{pabaigos_data.strftime('%Y-%m-%d')}.csv"
+    failo_kelias = filedialog.asksaveasfilename(
+        defaultextension=".csv",
+        initialfile=numatytas_pavadinimas,
+        filetypes=[("CSV failai", "*.csv"), ("Visi failai", "*.*")]
+    )
+
+    if not failo_kelias: # Vartotojas atšaukė failo pasirinkimą
+        return
+
+    # Blokuojame mygtuką ir paleidžiame duomenų gavimą kitoje gijoje
+    run_button.config(state="disabled")
+    threading.Thread(target=gauti_duomenis_ir_saugoti, args=(pradzios_data, pabaigos_data, failo_kelias)).start()
+
+
+# --- GUI Kūrimas ---
+root = tk.Tk()
+root.title("CNN Fear & Greed Index Scraper")
+root.geometry("450x300")
+root.resizable(False, False)
+
+# Stiliaus konfigūracija
+style = ttk.Style(root)
+style.theme_use('clam') # Galima rinktis: 'clam', 'alt', 'default', 'classic'
+
+# Pagrindinis rėmelis
+main_frame = ttk.Frame(root, padding="20 20 20 20")
+main_frame.pack(fill="both", expand=True)
+
+# Antraštė
+header_label = ttk.Label(main_frame, text="Istorinių Duomenų Generatorius", font=("Helvetica", 16, "bold"))
+header_label.pack(pady=(0, 20))
+
+# Datų pasirinkimo rėmelis
+dates_frame = ttk.Frame(main_frame)
+dates_frame.pack(pady=10)
+
+ttk.Label(dates_frame, text="Pradžios data:").grid(row=0, column=0, padx=5, sticky="w")
+cal_start = DateEntry(dates_frame, width=12, background='darkblue', foreground='white', borderwidth=2, date_pattern='y-mm-dd')
+cal_start.grid(row=0, column=1, padx=5)
+
+ttk.Label(dates_frame, text="Pabaigos data:").grid(row=1, column=0, padx=5, sticky="w")
+cal_end = DateEntry(dates_frame, width=12, background='darkblue', foreground='white', borderwidth=2, date_pattern='y-mm-dd')
+cal_end.grid(row=1, column=1, padx=5, pady=5)
+cal_end.set_date(datetime.now()) # Nustatome šiandienos datą kaip numatytąją
+
+# Mygtukas
+run_button = ttk.Button(main_frame, text="Generuoti CSV", command=paleisti_generavima)
+run_button.pack(pady=20, ipadx=10, ipady=5)
+
+# Būsenos juosta
+status_frame = ttk.Frame(root)
+status_frame.pack(side="bottom", fill="x", padx=5, pady=5)
+status_label = ttk.Label(status_frame, text="Pasirinkite datas ir spauskite 'Generuoti'")
+status_label.pack(side="left")
+progress_bar = ttk.Progressbar(status_frame, mode='indeterminate')
+progress_bar.pack(side="right")
+
+root.mainloop()
