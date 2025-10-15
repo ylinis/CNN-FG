@@ -1,0 +1,6 @@
+# Virtuali aplinka
+venv/
+__pycache__/
+
+# Sugeneruoti failai
+*.csv
